@@ -75,4 +75,5 @@ uploaded = st.file_uploader("Upload CSV with a text column named 'text'", type=[
 if uploaded:
     import pandas as pd
     df = pd.read_csv(uploaded)
-    if 'text' not in df
+    if 'text' not in df:
+        st.error("The column 'text' is missing in the uploaded file.")
