@@ -1,0 +1,7 @@
+streamlit
+joblib
+transformers
+torch
+pandas
+numpy
+
