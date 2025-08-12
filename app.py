@@ -1,79 +1,45 @@
-# app.py
 import streamlit as st
-
-import os
 from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
-import numpy as np
+import pandas as pd
 
-st.set_page_config(page_title="Tweet Sentiment (TFIDF / BERT)", layout="wide")
-
+# إعداد الصفحة
+st.set_page_config(page_title="🧠 Tweet Sentiment Analyzer", layout="wide")
 st.title("🧠 Tweet Sentiment Analyzer")
-st.markdown("Choose model: Baseline (TF-IDF + Logistic) or Transformer (BERT)")
+st.write("حلل مشاعر التغريدات باستخدام الذكاء الاصطناعي")
 
-# paths
-WORK_DIR = "models"   # ضع مجلد النماذج هنا أو اسم المجلد الذي حملت إليه الملفات
-baseline_path = os.path.join(WORK_DIR, "baseline_tfidf_logreg.joblib")
-bert_dir = os.path.join(WORK_DIR, "bert_sentiment_model")  # إن حفظت fine-tuned model هنا
+# تحميل النموذج
+@st.cache_resource
+def load_model():
+    model_name = "cardiffnlp/twitter-roberta-base-sentiment"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name)
+    return pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
 
-model_choice = st.selectbox("Model", ["Baseline (fast)", "Transformer (BERT)"])
+sentiment_analyzer = load_model()
 
-# load baseline if exists
-baseline = None
-if os.path.exists(baseline_path):
-    try:
-        baseline = joblib.load(baseline_path)
-    except Exception as e:
-        st.warning("Could not load baseline model: " + str(e))
+# إدخال النص
+tweet_text = st.text_area("✍️ اكتب التغريدة هنا", height=100)
 
-# load transformer pipeline if selected
-transformer_pipeline = None
-if model_choice.startswith("Transformer"):
-    if os.path.isdir(bert_dir):
-        # load fine-tuned model from local
-        try:
-            tokenizer = AutoTokenizer.from_pretrained(bert_dir)
-            model = AutoModelForSequenceClassification.from_pretrained(bert_dir)
-            transformer_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
-        except Exception as e:
-            st.warning("Failed to load local BERT model: " + str(e))
-    # fallback to HF hub model
-    if transformer_pipeline is None:
-        st.info("Using pre-trained hub model: cardiffnlp/twitter-roberta-base-sentiment")
-        transformer_pipeline = pipeline("sentiment-analysis", model="cardiffnlp/twitter-roberta-base-sentiment")
+if st.button("تحليل المشاعر"):
+    if tweet_text.strip():
+        result = sentiment_analyzer(tweet_text)
+        label = result[0]['label']
+        score = round(result[0]['score'], 3)
 
-# input area
-text = st.text_area("Paste tweet or review here:", height=200)
-if st.button("Analyze"):
-    if not text.strip():
-        st.warning("Please enter some text.")
+        st.success(f"📌 النتيجة: **{label}** (الثقة: {score})")
     else:
-        if model_choice.startswith("Baseline"):
-            if baseline is None:
-                st.error("Baseline model not found. Use Transformer or upload model.")
-            else:
-                pred = baseline.predict([text])[0]
-                probs = None
-                try:
-                    probs = baseline.predict_proba([text])[0]
-                except:
-                    pass
-                st.success(f"Prediction: {pred}")
-                if probs is not None:
-                    st.write("Probabilities:", probs)
-        else:
-            # transformer
-            try:
-                out = transformer_pipeline(text[:512])  # limit length
-                st.success(f"Label: {out[0]['label']}  — score: {out[0]['score']:.3f}")
-            except Exception as e:
-                st.error("Transformer inference failed: " + str(e))
+        st.warning("⚠️ الرجاء إدخال نص قبل التحليل")
 
-# Batch mode: upload CSV and run inference
-st.markdown("---")
-st.subheader("Batch inference (CSV)")
-uploaded = st.file_uploader("Upload CSV with a text column named 'text'", type=["csv"])
-if uploaded:
-    import pandas as pd
-    df = pd.read_csv(uploaded)
-    if 'text' not in df:
-        st.error("The column 'text' is missing in the uploaded file.")
+# رفع ملف CSV
+uploaded_file = st.file_uploader("📂 أو ارفع ملف CSV يحتوي على عمود 'text'", type=['csv'])
+
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
+    if 'text' in df.columns:
+        st.write("🔍 تحليل جميع التغريدات في الملف...")
+        df['sentiment'] = df['text'].apply(lambda x: sentiment_analyzer(str(x))[0]['label'])
+        st.dataframe(df)
+        csv_output = df.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 تحميل النتائج CSV", data=csv_output, file_name="tweet_sentiment_results.csv", mime="text/csv")
+    else:
+        st.error("❌ الملف يجب أن يحتوي على عمود اسمه 'text'")
