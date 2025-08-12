@@ -1,10 +1,6 @@
 streamlit
-joblib
 transformers
 torch
-pandas
-numpy
-
-streamlit
 joblib
+pandas
 scikit-learn
